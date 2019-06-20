@@ -3,6 +3,8 @@ package com.caorui.plugin;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
+import org.apache.maven.plugins.annotations.LifecyclePhase;
+import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 
 import java.io.*;
@@ -12,6 +14,7 @@ import java.security.MessageDigest;
  * 自定义插件
  * 功能：取消css、js、html页面的缓存
  */
+@Mojo(name="hello",defaultPhase= LifecyclePhase.PACKAGE)
 public class HelloMojo extends AbstractMojo {
     //版本号
     private String version;
@@ -40,11 +43,15 @@ public class HelloMojo extends AbstractMojo {
             return;
         }
         //判断文件是否为文件夹
-        if (file.isDirectory()) {//是文件夹
-            scanFile(file);
-        } else {//是文件
-            isStipulation(file);
+        File[] files = file.listFiles();
+        for(File f:files){
+            if (f.isDirectory()) {//是文件夹
+                scanFile(f);
+            } else {//是文件
+                isStipulation(f);
+            }
         }
+
     }
 
     /**
@@ -115,26 +122,45 @@ public class HelloMojo extends AbstractMojo {
      * 更改文件中静态资源
      */
     private void replace(File file, String version) {
+        //获取hash的版本后10位
+        version = version.substring(25);
+        //读IO
         FileInputStream fis = null;
         InputStreamReader isr = null;
         BufferedReader br = null;
+        //写IO
+        File wfile = new File(file.getName()+"-w");
+//        FileOutputStream fos = null;
+        PrintWriter pw = null;
         try {
+            //读IO
             fis = new FileInputStream(file);
             isr = new InputStreamReader(fis);
             br = new BufferedReader(isr);
+            //写IO
+            pw = new PrintWriter(wfile);
+
             String line = null;
             //读文件行
             while ((line = br.readLine()) != null) {
                 //判断文件是否是script或者css引用
                 String scrStart = "<script";
                 String cssStart = "<link";
+                line = line.trim();//去除空格
                 if (line.startsWith(scrStart)) {//javaScript
-                    //替换.js
-                    line.replaceAll("\\.js", ".js?v=" + version);
+                    //匹配为双引号的情况
+                    line = line.replaceAll("\\.js(\\?v=\\w*)?[\"]", ".js?v="+version+"\"");
+                    //匹配为单引号的情况
+                    line = line.replaceAll("\\.js(\\?v=\\w*)?[\']", ".js?v="+version+"\'");
+
                 } else if (line.startsWith(cssStart)) {
-                    //替换.js
-                    line.replaceAll("\\.css", ".css?v=" + version);
+                    //替换.css
+                    //匹配为双引号的情况
+                    line = line.replaceAll("\\.css(\\?v=\\w*)?[\"]", ".css?v="+version+"\"");
+                    //匹配为单引号的情况
+                    line = line.replaceAll("\\.css(\\?v=\\w*)?[\']", ".css?v="+version+"\'");
                 }
+                pw.println(line);
             }
 
         } catch (Exception e) {
@@ -143,19 +169,26 @@ public class HelloMojo extends AbstractMojo {
             //关闭流
             if (fis != null) {
                 try {
+                    fis.close();
                     br.close();
-                    System.out.println(fis == null);
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
             }
+            if(pw!=null){
+                pw.close();
+            }
         }
+        //删除之前的文件
+        file.delete();
+        String path = file.getAbsolutePath();
+        wfile.renameTo(new File(path));
     }
 
     public static void main(String[] args) {
         HelloMojo mojo = new HelloMojo();
-        mojo.suffix=".jsp,.html,.css";
-        mojo.file = "C:\\Users\\38474\\Desktop\\jsoup\\jsoup";
+        mojo.suffix=".ftl";
+        mojo.file = "C:\\Users\\38474\\Desktop\\jsoup\\jsoup\\jsoup\\src\\main";
         try {
             mojo.execute();
         } catch (MojoExecutionException e) {
